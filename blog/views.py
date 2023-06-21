@@ -10,9 +10,10 @@ from .forms import PostForm
 
 class Index(ListView):
     model = Post
-    queryset = Post.objects.all().order_by('-date')
+    posts = Post.published.all().order_by('-publish_date')
+    context_object_name = "posts"
     template_name = 'blog/index.html'
-    paginate_by = 1
+    paginate_by = 3
 
 
 def add_post(request):
@@ -23,23 +24,16 @@ def add_post(request):
             post.author = request.user
             post.created_date = timezone.now
             post.save()
-            return redirect('detail_post', pk=post.pk)
+            return redirect('detail_post', year=post.publish_date.year, month=post.publish_date.month, day=post.publish_date.day, post=post.slug)
     else:
         form = PostForm()
     return render(request, 'blog/blog_edit.html', {'form': form})
 
 
-class DetailPostView(DetailView):
-    model = Post
-    template_name = 'blog/blog_post.html'
-
-    def get_context_data(self, *args, **kwargs):
-        context = super(DetailPostView, self).get_context_data(*args, **kwargs)
-        context['liked_by_user'] = False
-        post = Post.objects.get(id=self.kwargs.get('pk'))
-        if post.likes.filter(pk=self.request.user.id).exists():
-            context['liked_by_user'] = True
-        return context
+def post_detail(request, year, month, day, post):
+    post = get_object_or_404(Post, status=Post.Status.PUBLISHED, slug=post,
+                             publish_date__year=year, publish_date__month=month, publish_date__day=day)
+    return render(request, "blog/blog_post.html", {"post": post})
 
 
 def edit_post(request, pk):
@@ -55,18 +49,6 @@ def edit_post(request, pk):
     else:
         form = PostForm(instance=post)
     return render(request, 'blog/blog_edit.html', {'form': form})
-
-
-class LikePost(View):
-    def post(self, request, pk):
-        post = Post.objects.get(id=pk)
-        if post.likes.filter(pk=self.request.user.id).exists():
-            post.likes.remove(request.user.id)
-        else:
-            post.likes.add(request.user.id)
-
-        post.save()
-        return redirect('detail_post', pk)
 
 
 class DeletePostView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
